@@ -1,0 +1,200 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:code_assets/code_assets.dart';
+import 'package:hooks/hooks.dart';
+import 'package:path/path.dart' as p;
+
+import 'cache.dart';
+import 'fetch.dart';
+import 'manifest.dart';
+import 'mode.dart';
+import 'release_names.dart';
+import 'source_key.dart';
+import 'targets.dart';
+
+/// Information for a source build that makes release files
+/// (`native_release`, ADR 005 D7).
+final class PrebuiltRelease {
+  PrebuiltRelease._({
+    required this.repository,
+    required this.sourceKey,
+    required this.target,
+  });
+
+  /// GitHub repository, `owner/name`.
+  final String repository;
+  final String sourceKey;
+  final TargetName target;
+  final List<Map<String, Object?>> _runtimeFiles = [];
+
+  String get tag => nativeReleaseTag(sourceKey);
+
+  /// The URL that file [fileName] of this target will have. A library can
+  /// contain the URLs of its runtime files (ADR 004 D13).
+  String assetUrl(String fileName) =>
+      githubAssetUrl(repository, tag, nativeAssetName(target.name, fileName));
+
+  /// Adds a file that apps download after install. The hook must not also
+  /// publish it as a code asset.
+  void addRuntimeFile(Uri file, {String? pack}) =>
+      _runtimeFiles.add({'file': file.toFilePath(), 'pack': ?pack});
+}
+
+/// Runs ADR 005 D2 in a build hook: publish prebuilt files, or run the
+/// package's source build.
+///
+/// ```dart
+/// await build(args, (input, output) async {
+///   if (!input.config.buildCodeAssets) return;
+///   await NativePrebuilt(input: input, output: output).run(
+///     (release) => buildFromSource(input, output, release),
+///   );
+/// });
+/// ```
+final class NativePrebuilt {
+  NativePrebuilt({
+    required this.input,
+    required this.output,
+    this.log,
+    Directory? cacheRoot,
+    this.httpClient,
+  }) : cacheRoot =
+           cacheRoot ??
+           switch (input.userDefines.path('native_prebuilt_cache')) {
+             final Uri path => Directory.fromUri(path),
+             null => defaultCacheRoot(),
+           };
+
+  final BuildInput input;
+  final BuildOutputBuilder output;
+
+  final void Function(String message)? log;
+
+  /// The shared cache (ADR 005 D9). The user define `native_prebuilt_cache`
+  /// (a path relative to the pubspec) changes it.
+  final Directory cacheRoot;
+  final HttpClient? httpClient;
+
+  /// Publishes the prebuilt files, or calls [sourceBuild].
+  ///
+  /// [sourceBuild] adds the code assets of the package to [output]. Its
+  /// argument is non-null when the build makes release files.
+  Future<void> run(
+    Future<void> Function(PrebuiltRelease? release) sourceBuild,
+  ) async {
+    final code = input.config.code;
+    final target = TargetName.of(code);
+    final stopwatch = Stopwatch()..start();
+    final sourceKey = await computeSourceKey(
+      input.packageRoot,
+      memoDirectory: Directory(p.join(cacheRoot.path, 'source_keys')),
+    );
+    output.dependencies.addAll(sourceKey.files.map((f) => f.uri));
+    final manifestFile = File.fromUri(input.packageRoot.resolve(manifestPath));
+    if (await manifestFile.exists()) output.dependencies.add(manifestFile.uri);
+    log?.call(
+      'Source key ${sourceKey.short} (${sourceKey.files.length} files, '
+      '${stopwatch.elapsedMilliseconds}ms)',
+    );
+
+    final mode = NativeBuildMode.parse(input.userDefines['native_build']);
+    final repository = parseReleaseRepository(
+      input.userDefines['native_release'],
+    );
+    final manifest = await PrebuiltManifest.load(input.packageRoot);
+    final prebuilt = manifest?.targets[target.name];
+    final problem = switch (manifest) {
+      null => 'the package has no $manifestPath',
+      _ when manifest.sourceKey != sourceKey.key =>
+        'the package sources differ from the sources of the prebuilt files '
+            '(local source key ${sourceKey.short}, manifest '
+            '${manifest.sourceKey.substring(0, 16)})',
+      _ when prebuilt == null => 'the manifest has no files for $target',
+      _ => compatibilityProblem(code, prebuilt.minOSVersion),
+    };
+
+    switch (decideBuild(
+      mode: mode,
+      releaseRepository: repository,
+      prebuiltProblem: problem,
+    )) {
+      case FailBuild(:final message):
+        throw StateError('${input.packageName}: $message');
+      case UsePrebuilt():
+        await _publishPrebuilt(prebuilt!);
+      case BuildFromSource(:final reason, :final requested):
+        log?.call('Building from source: $reason');
+        final release = repository == null
+            ? null
+            : PrebuiltRelease._(
+                repository: repository,
+                sourceKey: sourceKey.key,
+                target: target,
+              );
+        try {
+          await sourceBuild(release);
+        } on Object {
+          if (!requested) {
+            log?.call(
+              'The source build failed. Prebuilt files were not used because '
+              '$reason. To get prebuilt files for these sources, run the '
+              'native release workflow of ${input.packageName}.',
+            );
+          }
+          rethrow;
+        }
+        if (release != null) await _writeSidecar(release);
+    }
+  }
+
+  Future<void> _publishPrebuilt(PrebuiltTarget prebuilt) async {
+    final outputDirectory = Directory.fromUri(input.outputDirectory);
+    await outputDirectory.create(recursive: true);
+    final http = httpClient ?? HttpClient();
+    try {
+      for (final file in prebuilt.files) {
+        if (file.delivery == Delivery.runtime) continue;
+        final cached = await _cached(file, http);
+        final published = File(p.join(outputDirectory.path, file.name));
+        await cached.copy(published.path);
+        output.assets.code.add(
+          CodeAsset(
+            package: input.packageName,
+            name: file.asset!,
+            linkMode: DynamicLoadingBundled(),
+            file: published.uri,
+          ),
+        );
+        log?.call('Published prebuilt ${file.name}');
+      }
+    } finally {
+      if (httpClient == null) http.close(force: true);
+    }
+  }
+
+  /// Returns the cache entry for [file], after a check of its SHA-256
+  /// (ADR 005 D9, I1).
+  Future<File> _cached(PrebuiltFile file, HttpClient http) => fetchVerified(
+    file.fetchSpec,
+    File(p.join(cacheRoot.path, file.sha256, file.name)),
+    client: http,
+    archiveCache: cacheRoot,
+    log: log,
+  );
+
+  Future<void> _writeSidecar(PrebuiltRelease release) async {
+    final sidecar = File.fromUri(
+      input.outputDirectory.resolve(releaseSidecarName),
+    );
+    await sidecar.writeAsString(
+      jsonEncode({
+        'schema': 1,
+        'repository': release.repository,
+        'sourceKey': release.sourceKey,
+        'target': release.target.name,
+        'runtimeFiles': release._runtimeFiles,
+      }),
+    );
+  }
+}
