@@ -22,9 +22,24 @@ const targetDescriptionName = 'target.json';
 /// Path of the Dart file that `native_prebuilt:runtime_release` writes.
 const runtimeDartPath = 'lib/src/native_prebuilt.g.dart';
 
-/// Oldest OS versions of release builds. Equal to the Flutter app template.
+/// Oldest macOS version of release builds.
 const defaultMacOSVersion = 12;
-const defaultIOSVersion = 15;
+
+/// Oldest iOS version of release builds.
+///
+/// Flutter 3.47 passes iOS 13 to every build hook, regardless of the app's
+/// deployment target. Its `targetIOSVersion` constant is in
+/// `flutter_tools/lib/src/isolated/native_assets/ios/native_assets.dart`.
+/// See https://github.com/flutter/flutter/issues/145104.
+///
+/// The app template uses iOS 15, but a release built for 15 cannot serve a
+/// hook request for 13. [compatibilityProblem] then selects a source build
+/// in mode auto, or fails in mode download. Release builds use 13 so Flutter
+/// can use the prebuilt files. `--ios-version` overrides this default for a
+/// package that needs a newer OS.
+const defaultIOSVersion = 13;
+
+/// Oldest Android API level of release builds.
 const defaultAndroidApi = 24;
 
 typedef Log = void Function(String message);

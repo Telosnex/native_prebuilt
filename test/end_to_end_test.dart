@@ -192,6 +192,50 @@ void main() {
     ]);
   });
 
+  test(
+    'iOS release default serves Flutter hooks that request iOS 13',
+    () async {
+      final ios = TargetName.parse('ios-arm64-iphoneos');
+      final out = Directory(p.join((await tempDir()).path, ios.name));
+      await buildTarget(
+        packageRoot: package.uri,
+        target: ios,
+        out: out,
+        repository: 'Telosnex/fake',
+        runner: 'test',
+      );
+      final manifest = await releaseTargets(
+        packageRoot: package.uri,
+        targetDirectories: [out],
+        repository: 'Telosnex/fake',
+        staging: await tempDir(),
+        publisher: publisher,
+        assetUrl: (tag, asset) => server.url('$tag/$asset'),
+      );
+      expect(manifest.targets[ios.name]!.minOSVersion, 13);
+      final released = await File(
+        p.join(out.path, 'libfake.dylib'),
+      ).readAsString();
+      expect(released, contains('source build; pack https://'));
+
+      // Flutter requests 13 even when the app deployment target is 15.
+      // A source fallback writes "pack null", not these release bytes.
+      for (final mode in ['auto', 'download']) {
+        final (_, output) = await runHook(
+          packageRoot: package.uri,
+          packageName: 'fake_native',
+          target: ios,
+          iOSVersion: 13,
+          defines: {'native_build': mode, 'native_prebuilt_cache': cache.path},
+        );
+        expect(
+          await File.fromUri(output.assets.code.single.file!).readAsString(),
+          released,
+        );
+      }
+    },
+  );
+
   test('runtime release writes the section and the Dart file', () async {
     final dir = await tempDir();
     await writeFiles(dir, {'b.onnx': 'model b', 'a.onnx': 'model a'});

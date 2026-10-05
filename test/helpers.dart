@@ -123,7 +123,7 @@ Future<BuildInput> buildInput(
     targetOS: os,
     macOS: os == OS.macOS ? MacOSCodeConfig(targetVersion: macOSVersion) : null,
     iOS: os == OS.iOS
-        ? IOSCodeConfig(targetSdk: IOSSdk.iPhoneOS, targetVersion: 15)
+        ? IOSCodeConfig(targetSdk: IOSSdk.iPhoneOS, targetVersion: 13)
         : null,
     android: os == OS.android ? AndroidCodeConfig(targetNdkApi: 24) : null,
   ).setupBuildInput(builder);
