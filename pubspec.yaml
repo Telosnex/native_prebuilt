@@ -1,0 +1,17 @@
+name: native_prebuilt
+description: Prebuilt native libraries for Dart build hooks, built by the same hook code that builds from source. See fllama ADR 005.
+version: 0.1.0
+publish_to: none
+repository: https://github.com/Telosnex/native_prebuilt
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  code_assets: ^1.0.0
+  crypto: ^3.0.7
+  hooks: ">=1.0.0 <3.0.0"
+  path: ^1.9.0
+
+dev_dependencies:
+  test: ^1.30.0
