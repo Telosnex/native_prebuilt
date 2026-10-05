@@ -3,7 +3,7 @@ library;
 
 export 'src/cache.dart' show defaultCacheRoot;
 export 'src/fetch.dart' show FetchException, FetchSpec, fetchVerified;
-export 'src/hook.dart' show NativePrebuilt, PrebuiltRelease;
+export 'src/hook.dart' show NativePrebuilt, PrebuiltRelease, SourceBuild;
 export 'src/manifest.dart';
 export 'src/mode.dart';
 export 'src/release_names.dart';

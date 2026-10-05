@@ -41,6 +41,25 @@ final class PrebuiltRelease {
       _runtimeFiles.add({'file': file.toFilePath(), 'pack': ?pack});
 }
 
+/// What a source build gets from [NativePrebuilt.run].
+final class SourceBuild {
+  SourceBuild._({
+    required this.sourceKey,
+    required this.reason,
+    required this.release,
+  });
+
+  /// The source key of the package. A local build cache can use it in its
+  /// own key (ADR 005 D4).
+  final SourceKey sourceKey;
+
+  /// Why the hook builds from source.
+  final String reason;
+
+  /// Non-null when the build makes release files (`native_release`).
+  final PrebuiltRelease? release;
+}
+
 /// Runs ADR 005 D2 in a build hook: publish prebuilt files, or run the
 /// package's source build.
 ///
@@ -48,7 +67,7 @@ final class PrebuiltRelease {
 /// await build(args, (input, output) async {
 ///   if (!input.config.buildCodeAssets) return;
 ///   await NativePrebuilt(input: input, output: output).run(
-///     (release) => buildFromSource(input, output, release),
+///     (source) => buildFromSource(input, output, source),
 ///   );
 /// });
 /// ```
@@ -78,10 +97,9 @@ final class NativePrebuilt {
 
   /// Publishes the prebuilt files, or calls [sourceBuild].
   ///
-  /// [sourceBuild] adds the code assets of the package to [output]. Its
-  /// argument is non-null when the build makes release files.
+  /// [sourceBuild] adds the code assets of the package to [output].
   Future<void> run(
-    Future<void> Function(PrebuiltRelease? release) sourceBuild,
+    Future<void> Function(SourceBuild source) sourceBuild,
   ) async {
     final code = input.config.code;
     final target = TargetName.of(code);
@@ -133,7 +151,13 @@ final class NativePrebuilt {
                 target: target,
               );
         try {
-          await sourceBuild(release);
+          await sourceBuild(
+            SourceBuild._(
+              sourceKey: sourceKey,
+              reason: reason,
+              release: release,
+            ),
+          );
         } on Object {
           if (!requested) {
             log?.call(

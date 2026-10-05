@@ -17,6 +17,13 @@ Future<void> main(List<String> arguments) => runCommand(
       help: 'Default: ImageOS and ImageVersion, or "local".',
     )
     ..addOption('toolchain', defaultsTo: '')
+    ..addMultiOption(
+      'define',
+      help:
+          'A user define for the hook, name=value. A value that is JSON '
+          '(an object, a number) is decoded.',
+      splitCommas: false,
+    )
     ..addOption('macos-version', defaultsTo: '$defaultMacOSVersion')
     ..addOption('ios-version', defaultsTo: '$defaultIOSVersion')
     ..addOption('android-api', defaultsTo: '$defaultAndroidApi'),
@@ -32,6 +39,9 @@ Future<void> main(List<String> arguments) => runCommand(
       repository: repositoryOf(args),
       runner: args.option('runner') ?? (image.isEmpty ? 'local' : image),
       toolchain: args.option('toolchain')!,
+      userDefines: {
+        for (final define in args.multiOption('define')) ...parseDefine(define),
+      },
       macOSVersion: int.parse(args.option('macos-version')!),
       iOSVersion: int.parse(args.option('ios-version')!),
       androidApi: int.parse(args.option('android-api')!),

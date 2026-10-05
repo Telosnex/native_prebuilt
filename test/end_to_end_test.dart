@@ -56,7 +56,8 @@ import 'package:native_prebuilt/native_prebuilt.dart';
 void main(List<String> args) async {
   await build(args, (input, output) async {
     if (!input.config.buildCodeAssets) return;
-    await NativePrebuilt(input: input, output: output).run((release) async {
+    await NativePrebuilt(input: input, output: output).run((source) async {
+      final release = source.release;
       final name = input.config.code.targetOS.dylibFileName('fake');
       final file = File.fromUri(input.outputDirectory.resolve(name));
       await file.writeAsString(

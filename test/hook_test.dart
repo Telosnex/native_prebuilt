@@ -74,8 +74,10 @@ void main() {
     var built = false;
     PrebuiltRelease? release;
     await NativePrebuilt(input: input, output: output, cacheRoot: cache).run((
-      r,
+      source,
     ) async {
+      final r = source.release;
+      expect(source.sourceKey.key, hasLength(64));
       built = true;
       release = r;
       if (sourceError != null) throw sourceError;

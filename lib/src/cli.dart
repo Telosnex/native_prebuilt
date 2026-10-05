@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
@@ -59,3 +60,17 @@ Future<Directory> stagingOf(ArgResults args, String prefix) async =>
       final path? => Directory(path),
       null => await Directory.systemTemp.createTemp(prefix),
     };
+
+/// Parses `name=value` of `--define`. A JSON value is decoded.
+Map<String, Object> parseDefine(String define) {
+  final i = define.indexOf('=');
+  if (i <= 0) throw FormatException('Expected name=value: "$define".');
+  final value = define.substring(i + 1);
+  Object decoded;
+  try {
+    decoded = jsonDecode(value) as Object? ?? value;
+  } on FormatException {
+    decoded = value;
+  }
+  return {define.substring(0, i): decoded};
+}
