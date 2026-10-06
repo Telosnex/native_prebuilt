@@ -4,12 +4,15 @@ import 'dart:io';
 /// Uploads release assets. [GhPublisher] uses the GitHub CLI.
 abstract interface class Publisher {
   /// Creates release [tag] with [assets], then publishes it. Fails if a
-  /// published release [tag] exists.
+  /// published release [tag] exists. [latest] marks it as the repository's
+  /// latest release on GitHub. Pass true only for a package's own release,
+  /// so that side releases (runtime files, GPU packs) never take the label.
   Future<void> publish({
     required String repository,
     required String tag,
     required List<File> assets,
     required String notes,
+    required bool latest,
   });
 
   /// Asset name to SHA-256 of published release [tag], or null if there is
@@ -43,6 +46,7 @@ final class GhPublisher implements Publisher {
     required String tag,
     required List<File> assets,
     required String notes,
+    required bool latest,
   }) async {
     final view = await _gh([
       'release', 'view', tag, '--repo', repository, '--json', 'isDraft', //
@@ -71,7 +75,7 @@ final class GhPublisher implements Publisher {
     ]);
     await _gh([
       'release', 'edit', tag, '--repo', repository, '--draft=false', //
-      '--latest=false',
+      '--latest=$latest',
     ]);
     log?.call('Published release $tag');
   }

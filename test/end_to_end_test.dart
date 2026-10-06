@@ -21,6 +21,7 @@ final class FakePublisher implements Publisher {
   final TestServer server;
   final published = <String, Map<String, String>>{};
   var publishCount = 0;
+  final latestByTag = <String, bool>{};
 
   @override
   Future<void> publish({
@@ -28,9 +29,11 @@ final class FakePublisher implements Publisher {
     required String tag,
     required List<File> assets,
     required String notes,
+    required bool latest,
   }) async {
     if (published.containsKey(tag)) throw StateError('exists');
     publishCount++;
+    latestByTag[tag] = latest;
     published[tag] = {};
     for (final asset in assets) {
       final bytes = await asset.readAsBytes();
@@ -159,6 +162,8 @@ void main() {
       assetUrl: (tag, asset) => server.url('$tag/$asset'),
     );
     expect(publisher.publishCount, 1);
+    // A package release is the latest release.
+    expect(publisher.latestByTag.values.single, true);
     expect(manifest.sourceKey, key.key);
     expect(manifest.targets.keys, ['macos-arm64']);
 
@@ -261,6 +266,8 @@ void main() {
     // The same set again reuses the published release.
     final again = await release();
     expect(publisher.publishCount, 1);
+    // Runtime files never take the latest label.
+    expect(publisher.latestByTag.values.single, false);
     expect(
       again.files.map((f) => f.downloadSha256),
       set.files.map((f) => f.downloadSha256),

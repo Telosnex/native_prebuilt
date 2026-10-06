@@ -358,6 +358,7 @@ Future<PrebuiltManifest> releaseTargets({
       repository: repository,
       tag: tag,
       assets: assets,
+      latest: true,
       notes:
           'Prebuilt native files of $packageName for source key '
           '${sourceKey.key}. Targets: ${(targets.keys.toList()..sort()).join(', ')}.',
@@ -581,6 +582,7 @@ Future<RuntimeFileSet> runtimeRelease({
         repository: repository,
         tag: tag,
         assets: assets,
+        latest: false,
         notes: 'Runtime files: ${names.join(', ')}.',
       );
     } else {
