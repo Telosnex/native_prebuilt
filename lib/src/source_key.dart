@@ -23,6 +23,9 @@ const defaultSourceExcludes = [
   'test/',
   'native_artifacts/prebuilt.json',
   'pubspec.lock',
+  // The package LICENSE holds the notices of the native code too, in the
+  // Flutter multi-license format. A notice change needs no new release.
+  'LICENSE',
 ];
 
 /// A file that the source key covers.

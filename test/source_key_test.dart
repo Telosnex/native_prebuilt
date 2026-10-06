@@ -56,6 +56,7 @@ void main() {
     final before = await keyOf(root);
     await writeFiles(root, {
       'README.md': 'changed',
+      'LICENSE': 'changed',
       'lib/fake_native.dart': '// changed',
       'native_artifacts/prebuilt.json': '{"changed": true}',
       '.gitignore': 'x',
